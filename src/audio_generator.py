@@ -7,9 +7,7 @@ import subprocess
 import requests
 
 
-ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v1/voices"
-ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-DEFAULT_MODEL_ID = "eleven_multilingual_v2"
+ELEVENLABS_BASE = "https://api.elevenlabs.io/v1"
 
 
 def _get_voice_id(api_key: str) -> str:
@@ -18,8 +16,11 @@ def _get_voice_id(api_key: str) -> str:
     if configured:
         return configured
 
-    headers = {"xi-api-key": api_key}
-    resp = requests.get(ELEVENLABS_VOICES_URL, headers=headers, timeout=10)
+    resp = requests.get(
+        f"{ELEVENLABS_BASE}/voices",
+        headers={"xi-api-key": api_key},
+        timeout=10,
+    )
     resp.raise_for_status()
     voices = resp.json().get("voices", [])
     if not voices:
@@ -30,17 +31,46 @@ def _get_voice_id(api_key: str) -> str:
     return voice["voice_id"]
 
 
-def generate_audio(quote: dict, output_path: str) -> tuple[str, float]:
-    """Synthesise speech for the quote and return (mp3_path, duration_seconds).
+def _get_model_id(api_key: str) -> str:
+    """Return configured model ID or the first TTS-capable model on the account."""
+    configured = os.environ.get("ELEVENLABS_MODEL_ID", "")
+    if configured:
+        return configured
 
-    Uses the ElevenLabs REST API directly to avoid SDK version issues.
-    """
+    resp = requests.get(
+        f"{ELEVENLABS_BASE}/models",
+        headers={"xi-api-key": api_key},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    models = resp.json()
+
+    # Prefer turbo/flash (fast + cheap), fall back to first available TTS model
+    preferred = ["eleven_turbo_v2", "eleven_flash_v2_5", "eleven_turbo_v2_5"]
+    tts_models = [m for m in models if m.get("can_do_text_to_speech", False)]
+
+    for pref in preferred:
+        for m in tts_models:
+            if m["model_id"] == pref:
+                print(f"Using model: {m['name']} ({m['model_id']})")
+                return m["model_id"]
+
+    if tts_models:
+        m = tts_models[0]
+        print(f"Using model: {m['name']} ({m['model_id']})")
+        return m["model_id"]
+
+    raise RuntimeError("No TTS-capable models found on ElevenLabs account")
+
+
+def generate_audio(quote: dict, output_path: str) -> tuple[str, float]:
+    """Synthesise speech for the quote and return (mp3_path, duration_seconds)."""
     api_key = os.environ.get("ELEVENLABS_API_KEY")
     if not api_key:
         raise RuntimeError("ELEVENLABS_API_KEY environment variable is not set")
 
-    model_id = os.environ.get("ELEVENLABS_MODEL_ID", DEFAULT_MODEL_ID)
     voice_id = _get_voice_id(api_key)
+    model_id = _get_model_id(api_key)
 
     text = f"{quote['content']}  — {quote['author']}"
     print(f"Generating audio ({len(text)} chars): {text[:80]}...")
@@ -59,9 +89,13 @@ def generate_audio(quote: dict, output_path: str) -> tuple[str, float]:
         },
     }
 
-    url = ELEVENLABS_TTS_URL.format(voice_id=voice_id)
+    url = f"{ELEVENLABS_BASE}/text-to-speech/{voice_id}"
     resp = requests.post(url, headers=headers, json=payload, timeout=60)
-    resp.raise_for_status()
+
+    if not resp.ok:
+        raise RuntimeError(
+            f"ElevenLabs TTS failed {resp.status_code}: {resp.text[:500]}"
+        )
 
     dest = os.path.join(output_path, "narration.mp3")
     with open(dest, "wb") as f:
