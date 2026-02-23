@@ -1,70 +1,71 @@
-"""Generate TTS narration via ElevenLabs and measure its duration."""
+"""Generate TTS narration via ElevenLabs REST API and measure its duration."""
 
 import json
 import os
 import subprocess
 
+import requests
 
+
+ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v1/voices"
+ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 DEFAULT_MODEL_ID = "eleven_multilingual_v2"
 
 
-def _get_voice_id(client) -> str:
-    """Return the configured voice ID, or fall back to the first available voice."""
+def _get_voice_id(api_key: str) -> str:
+    """Return configured voice ID or the first available voice on the account."""
     configured = os.environ.get("ELEVENLABS_VOICE_ID", "")
     if configured:
         return configured
 
-    # Dynamically pick the first available pre-made or cloned voice
-    try:
-        voices = client.voices.get_all()
-        available = getattr(voices, "voices", [])
-        if available:
-            voice_id = available[0].voice_id
-            print(f"Using voice: {available[0].name} ({voice_id})")
-            return voice_id
-    except Exception as e:
-        print(f"Warning: could not list voices ({e}), using fallback ID")
+    headers = {"xi-api-key": api_key}
+    resp = requests.get(ELEVENLABS_VOICES_URL, headers=headers, timeout=10)
+    resp.raise_for_status()
+    voices = resp.json().get("voices", [])
+    if not voices:
+        raise RuntimeError("No voices found on ElevenLabs account")
 
-    return "21m00Tcm4TlvDq8ikWAM"  # Rachel — stable pre-made fallback
+    voice = voices[0]
+    print(f"Using voice: {voice['name']} ({voice['voice_id']})")
+    return voice["voice_id"]
 
 
 def generate_audio(quote: dict, output_path: str) -> tuple[str, float]:
     """Synthesise speech for the quote and return (mp3_path, duration_seconds).
 
-    Args:
-        quote: dict with 'content' and 'author'.
-        output_path: Directory where narration.mp3 will be saved.
-
-    Returns:
-        (absolute path to mp3, duration in seconds)
+    Uses the ElevenLabs REST API directly to avoid SDK version issues.
     """
-    from elevenlabs import ElevenLabs
-
     api_key = os.environ.get("ELEVENLABS_API_KEY")
     if not api_key:
         raise RuntimeError("ELEVENLABS_API_KEY environment variable is not set")
 
     model_id = os.environ.get("ELEVENLABS_MODEL_ID", DEFAULT_MODEL_ID)
-
-    client = ElevenLabs(api_key=api_key)
-    voice_id = _get_voice_id(client)
+    voice_id = _get_voice_id(api_key)
 
     text = f"{quote['content']}  — {quote['author']}"
     print(f"Generating audio ({len(text)} chars): {text[:80]}...")
 
-    audio_bytes = client.text_to_speech.convert(
-        voice_id=voice_id,
-        model_id=model_id,
-        text=text,
-    )
+    headers = {
+        "xi-api-key": api_key,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
+    }
+    payload = {
+        "text": text,
+        "model_id": model_id,
+        "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.75,
+        },
+    }
 
-    # elevenlabs SDK may return a generator of bytes chunks
-    if hasattr(audio_bytes, "__iter__") and not isinstance(audio_bytes, (bytes, bytearray)):
-        audio_bytes = b"".join(audio_bytes)
+    url = ELEVENLABS_TTS_URL.format(voice_id=voice_id)
+    resp = requests.post(url, headers=headers, json=payload, timeout=60)
+    resp.raise_for_status()
 
     dest = os.path.join(output_path, "narration.mp3")
     with open(dest, "wb") as f:
-        f.write(audio_bytes)
+        f.write(resp.content)
 
     duration = _get_duration(dest)
     print(f"Audio saved: {dest} ({duration:.2f}s)")
