@@ -1,4 +1,4 @@
-"""Fetch a random landscape background video from Pexels."""
+"""Fetch a random portrait background video from Pexels."""
 
 import os
 import random
@@ -8,16 +8,16 @@ import requests
 PEXELS_VIDEO_URL = "https://api.pexels.com/videos/search"
 
 SEARCH_QUERIES = [
-    "mountains landscape",
+    "mountains",
     "ocean waves",
-    "forest nature",
+    "forest",
     "waterfall",
     "meadow sunrise",
     "desert dunes",
-    "river flowing",
+    "river",
     "night sky stars",
-    "city timelapse",
-    "winter snow landscape",
+    "city",
+    "snow nature",
 ]
 
 
@@ -42,7 +42,7 @@ def fetch_video(output_path: str) -> str:
     params = {
         "query": query,
         "per_page": 15,
-        "orientation": "landscape",
+        "orientation": "portrait",
         "size": "medium",
     }
 
@@ -56,12 +56,11 @@ def fetch_video(output_path: str) -> str:
 
     video = random.choice(videos)
 
-    # Pick the highest-quality video file available
-    video_files = sorted(
-        video.get("video_files", []),
-        key=lambda f: f.get("width", 0),
-        reverse=True,
-    )
+    # Prefer portrait files (height > width), then pick highest resolution
+    all_files = video.get("video_files", [])
+    portrait_files = [f for f in all_files if f.get("height", 0) > f.get("width", 0)]
+    candidates = portrait_files if portrait_files else all_files
+    video_files = sorted(candidates, key=lambda f: f.get("height", 0), reverse=True)
     if not video_files:
         raise RuntimeError("Selected Pexels video has no downloadable files")
 
