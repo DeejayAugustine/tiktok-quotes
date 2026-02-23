@@ -5,8 +5,27 @@ import os
 import subprocess
 
 
-DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"   # Sarah
-DEFAULT_MODEL_ID = "eleven_turbo_v2_5"
+DEFAULT_MODEL_ID = "eleven_multilingual_v2"
+
+
+def _get_voice_id(client) -> str:
+    """Return the configured voice ID, or fall back to the first available voice."""
+    configured = os.environ.get("ELEVENLABS_VOICE_ID", "")
+    if configured:
+        return configured
+
+    # Dynamically pick the first available pre-made or cloned voice
+    try:
+        voices = client.voices.get_all()
+        available = getattr(voices, "voices", [])
+        if available:
+            voice_id = available[0].voice_id
+            print(f"Using voice: {available[0].name} ({voice_id})")
+            return voice_id
+    except Exception as e:
+        print(f"Warning: could not list voices ({e}), using fallback ID")
+
+    return "21m00Tcm4TlvDq8ikWAM"  # Rachel — stable pre-made fallback
 
 
 def generate_audio(quote: dict, output_path: str) -> tuple[str, float]:
@@ -25,13 +44,14 @@ def generate_audio(quote: dict, output_path: str) -> tuple[str, float]:
     if not api_key:
         raise RuntimeError("ELEVENLABS_API_KEY environment variable is not set")
 
-    voice_id = os.environ.get("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
     model_id = os.environ.get("ELEVENLABS_MODEL_ID", DEFAULT_MODEL_ID)
+
+    client = ElevenLabs(api_key=api_key)
+    voice_id = _get_voice_id(client)
 
     text = f"{quote['content']}  — {quote['author']}"
     print(f"Generating audio ({len(text)} chars): {text[:80]}...")
 
-    client = ElevenLabs(api_key=api_key)
     audio_bytes = client.text_to_speech.convert(
         voice_id=voice_id,
         model_id=model_id,
