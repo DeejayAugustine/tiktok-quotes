@@ -16,7 +16,7 @@ FONT_DIR = Path(__file__).parent.parent / "assets" / "fonts"
 VIDEO_DURATION = 20
 
 
-def _make_text_overlay(quote: dict, output_path: str) -> str:
+def _make_text_overlay(quote: dict, output_path: str, index: int = 1) -> str:
     """Render a transparent PNG with quote text and semi-transparent backdrop.
 
     Returns the path to the generated PNG.
@@ -86,7 +86,7 @@ def _make_text_overlay(quote: dict, output_path: str) -> str:
     draw.text((ax + 2, y + 2), author_line, font=author_font, fill=(0, 0, 0, 140))
     draw.text((ax, y), author_line, font=author_font, fill=(220, 220, 220, 230))
 
-    dest = os.path.join(output_path, "text_overlay.png")
+    dest = os.path.join(output_path, f"text_overlay_{index}.png")
     img.save(dest, "PNG")
     return dest
 
@@ -117,6 +117,7 @@ def compose_video(
     video_path: str,
     quote: dict,
     output_path: str,
+    index: int = 1,
 ) -> str:
     """Compose the final TikTok-ready MP4 (no audio).
 
@@ -127,8 +128,8 @@ def compose_video(
     Returns:
         Path to the final tiktok_final.mp4.
     """
-    overlay_path = _make_text_overlay(quote, output_path)
-    dest = os.path.join(output_path, "tiktok_final.mp4")
+    overlay_path = _make_text_overlay(quote, output_path, index)
+    dest = os.path.join(output_path, f"tiktok_video_{index}.mp4")
 
     # Scale portrait video to fill 1080x1920, crop any overflow, then overlay text
     filter_complex = (
