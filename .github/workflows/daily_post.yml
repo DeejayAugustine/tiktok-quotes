@@ -9,6 +9,8 @@ jobs:
   post:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write        # needed to push history.json back to repo
 
     steps:
       - name: Checkout repository
@@ -29,13 +31,18 @@ jobs:
       - name: Run pipeline
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
-          ELEVENLABS_MODEL_ID: ${{ secrets.ELEVENLABS_MODEL_ID }}
           TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_OPEN_ID: ${{ secrets.TIKTOK_OPEN_ID }}
         run: python main.py
+
+      - name: Commit updated history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add history.json
+          git diff --staged --quiet || git commit -m "chore: update history [skip ci]"
+          git push
 
       - name: Upload output artifact
         if: always()

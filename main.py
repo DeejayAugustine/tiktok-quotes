@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+import src.history as history_store
 from src.quote_fetcher import fetch_quote
 from src.tiktok_poster import post_video
 from src.video_composer import compose_video
@@ -20,14 +21,18 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Run ID: {run_id}  →  output: {output_dir}")
 
+    # Load history
+    history = history_store.load()
+    print(f"History: {len(history['quotes'])} quotes used, {len(history['videos'])} videos used\n")
+
     # 1. Fetch quote
-    print("\n[1/4] Fetching quote...")
-    quote = fetch_quote()
+    print("[1/4] Fetching quote...")
+    quote = fetch_quote(history)
     print(f"  \"{quote['content']}\" — {quote['author']}")
 
     # 2. Download background video
     print("\n[2/4] Fetching background video...")
-    video_path = fetch_video(str(output_dir))
+    video_path, video_id = fetch_video(str(output_dir), history)
 
     # 3. Compose TikTok video
     print("\n[3/4] Composing video...")
@@ -35,11 +40,13 @@ def main() -> int:
 
     # 4. Post to TikTok
     print("\n[4/4] Posting to TikTok...")
-    posted = post_video(final_video, quote)
+    post_video(final_video, quote)
+
+    # Save history only after everything succeeded
+    history_store.record(history, quote["content"], video_id)
+    history_store.save(history)
 
     print(f"\nDone! Final video: {final_video}")
-    if not posted:
-        print("(Stub mode — inspect the video locally)")
     return 0
 
 
