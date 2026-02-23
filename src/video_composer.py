@@ -148,7 +148,9 @@ def compose_video(
         "-t", str(VIDEO_DURATION),
         "-c:v", "libx264",
         "-preset", "fast",
-        "-crf", "23",
+        "-crf", "26",
+        "-maxrate", "2500k",    # hard bitrate cap keeps file under ~8 MB for 20s
+        "-bufsize", "5000k",
         "-pix_fmt", "yuv420p",
         "-an",                  # no audio
         "-movflags", "+faststart",

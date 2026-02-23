@@ -67,11 +67,14 @@ def fetch_video(output_path: str, history: dict) -> tuple[str, int]:
 
         video = random.choice(fresh)
 
-        # Prefer portrait files (height > width), then pick highest resolution
+        # Prefer portrait files (height > width) at HD resolution (≤1920px tall)
+        # to keep output file sizes manageable for email delivery
         all_files = video.get("video_files", [])
         portrait_files = [f for f in all_files if f.get("height", 0) > f.get("width", 0)]
         candidates = portrait_files if portrait_files else all_files
-        video_files = sorted(candidates, key=lambda f: f.get("height", 0), reverse=True)
+        hd_files = [f for f in candidates if f.get("height", 0) <= 1920]
+        final_candidates = hd_files if hd_files else candidates
+        video_files = sorted(final_candidates, key=lambda f: f.get("height", 0), reverse=True)
         if not video_files:
             continue
 
