@@ -13,7 +13,7 @@ W, H = 1080, 1920
 FONT_DIR = Path(__file__).parent.parent / "assets" / "fonts"
 
 # Video duration in seconds (no narration — fixed length)
-VIDEO_DURATION = 20
+VIDEO_DURATION = 61
 
 
 def _make_text_overlay(quote: dict, output_path: str, index: int = 1) -> str:
